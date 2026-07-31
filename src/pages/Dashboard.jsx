@@ -129,7 +129,7 @@ function ExerciseCard({ exercise, logs, onSuccess }) {
       </div>
 
       <p><strong>Set:</strong> {exercise.sets}</p>
-      <p><strong>Target Minimal:</strong> {target} {unit}</p>
+      <p><strong>Target Minimal Total:</strong> {target} {unit}</p>
       {exercise.note && <p className="mt-2" style={{ fontSize: '0.875rem' }}><em>Catatan: {exercise.note}</em></p>}
 
       <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
