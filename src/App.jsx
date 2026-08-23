@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import CollegeSchedule from './pages/CollegeSchedule';
+import Study from './pages/Study';
 import History from './pages/History';
 import Settings from './pages/Settings';
 import Login from './components/Login';
@@ -33,6 +34,7 @@ function App() {
           <Route path="/" element={<Navigate to="/workout" replace />} />
           <Route path="/workout" element={<Dashboard />} />
           <Route path="/college" element={<CollegeSchedule />} />
+          <Route path="/study" element={<Study />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Dumbbell, GraduationCap, LineChart, Settings, LogOut } from 'lucide-react';
+import { Dumbbell, GraduationCap, BookOpen, LineChart, Settings, LogOut } from 'lucide-react';
 
 export default function Navbar({ onLogout }) {
   const location = useLocation();
@@ -24,6 +24,14 @@ export default function Navbar({ onLogout }) {
         >
           <GraduationCap size={18} />
           <span>Kuliah</span>
+        </Link>
+
+        <Link 
+          to="/study" 
+          className={`nav-link ${location.pathname === '/study' ? 'active' : ''}`}
+        >
+          <BookOpen size={18} />
+          <span>Belajar</span>
         </Link>
 
         <Link 
