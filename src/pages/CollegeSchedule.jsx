@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { scheduleData as initialScheduleData, unscheduledClasses } from '../data/schedule';
 import { supabase } from '../supabaseClient';
-import { BookOpen, Clock, MapPin, User, CheckCircle2, Calendar, Edit3, RotateCcw, X, AlertTriangle, CalendarCheck } from 'lucide-react';
+import { BookOpen, Clock, MapPin, User, CheckCircle2, Calendar, Edit3, RotateCcw, X, AlertTriangle, CalendarCheck, AlertCircle, XCircle } from 'lucide-react';
 import { format, getISOWeek, getYear } from 'date-fns';
 import { id } from 'date-fns/locale';
 
 export default function CollegeSchedule() {
   const [dayIndex, setDayIndex] = useState(new Date().getDay());
   const [viewMode, setViewMode] = useState('today'); // 'today' or 'week'
-  const [attendance, setAttendance] = useState({});
+  const [attendance, setAttendance] = useState({}); // { [className]: 'hadir' | 'izin' | 'absen' }
   const [loading, setLoading] = useState(true);
 
   // Current week identifier, e.g. "2026-W34"
@@ -25,7 +25,6 @@ export default function CollegeSchedule() {
     const saved = localStorage.getItem('tempCollegeOverrides');
     if (!saved) return {};
     const parsed = JSON.parse(saved);
-    // If saved overrides belong to an old week, automatically discard them!
     if (parsed.weekKey !== currentWeekKey) {
       localStorage.removeItem('tempCollegeOverrides');
       return {};
@@ -34,12 +33,11 @@ export default function CollegeSchedule() {
   });
 
   // Modal State
-  const [editingClass, setEditingClass] = useState(null); // { dayIdx, classObj }
+  const [editingClass, setEditingClass] = useState(null);
   const [formData, setFormData] = useState({ name: '', code: '', time: '', room: '', lecturer: '' });
 
   const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
-  // Helper to compute effective schedule considering permanent schedule + temporary overrides
   const getEffectiveSchedule = (scheduleObj, tempObj) => {
     const effective = JSON.parse(JSON.stringify(scheduleObj));
     Object.keys(tempObj).forEach(classId => {
@@ -72,48 +70,52 @@ export default function CollegeSchedule() {
     end.setHours(23, 59, 59, 999);
 
     try {
+      // Query separate table: college_attendance
       const { data, error } = await supabase
-        .from('workouts')
+        .from('college_attendance')
         .select('*')
         .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString())
-        .eq('type', 'attendance');
+        .lte('created_at', end.toISOString());
 
       if (!error && data) {
         const attObj = {};
         data.forEach(item => {
-          attObj[item.exercise_name] = true;
+          attObj[item.subject_name] = item.status;
         });
         setAttendance(attObj);
       }
     } catch (err) {
-      console.warn("Could not fetch attendance", err);
+      console.warn("Could not fetch attendance from college_attendance table", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggleAttendance = async (className) => {
-    const isAttended = !attendance[className];
-    setAttendance(prev => ({ ...prev, [className]: isAttended }));
+  const handleSetAttendance = async (className, status) => {
+    const newStatus = attendance[className] === status ? null : status;
+    
+    setAttendance(prev => {
+      const copy = { ...prev };
+      if (!newStatus) delete copy[className];
+      else copy[className] = newStatus;
+      return copy;
+    });
 
     try {
-      if (isAttended) {
-        await supabase.from('workouts').insert([
+      if (newStatus) {
+        // Insert into separate table: college_attendance
+        await supabase.from('college_attendance').insert([
           {
-            exercise_name: className,
-            amount: 1,
-            type: 'attendance',
-            target_met: true
+            subject_name: className,
+            status: newStatus
           }
         ]);
       }
     } catch (err) {
-      console.error("Error updating attendance:", err);
+      console.error("Error updating attendance status in college_attendance:", err);
     }
   };
 
-  // Open Edit Modal
   const handleOpenEdit = (dIdx, cls) => {
     setEditingClass({ dayIdx: dIdx, id: cls.id, isTemporary: !!cls.isTemporary });
     setFormData({
@@ -125,7 +127,6 @@ export default function CollegeSchedule() {
     });
   };
 
-  // Save as Temporary (Current Week Only)
   const handleSaveTemporary = (e) => {
     e.preventDefault();
     if (!editingClass) return;
@@ -148,14 +149,11 @@ export default function CollegeSchedule() {
     setEditingClass(null);
   };
 
-  // Save as Permanent (All Weeks)
   const handleSavePermanent = (e) => {
     e.preventDefault();
     if (!editingClass) return;
 
     const { dayIdx, id } = editingClass;
-
-    // Remove any temporary override for this class if saving permanently
     const newOverrides = { ...temporaryOverrides };
     delete newOverrides[id];
     setTemporaryOverrides(newOverrides);
@@ -164,7 +162,6 @@ export default function CollegeSchedule() {
       overrides: newOverrides
     }));
 
-    // Update permanent schedule
     const updatedPermanent = { ...permanentSchedule };
     updatedPermanent[dayIdx].classes = updatedPermanent[dayIdx].classes.map(cls => {
       if (cls.id === id) {
@@ -179,13 +176,11 @@ export default function CollegeSchedule() {
     setEditingClass(null);
   };
 
-  // Reset all temporary changes
   const handleClearTemporary = () => {
     localStorage.removeItem('tempCollegeOverrides');
     setTemporaryOverrides({});
   };
 
-  // Reset to default schedule
   const handleResetSchedule = () => {
     if (window.confirm("Apakah Anda yakin ingin mengembalikan seluruh jadwal ke versi awal? Semua perubahan akan dihapus.")) {
       localStorage.removeItem('customCollegeSchedule');
@@ -259,9 +254,9 @@ export default function CollegeSchedule() {
           ) : (
             <div className="classes-grid">
               {todaySchedule.classes.map((cls) => {
-                const isAttended = !!attendance[cls.name];
+                const currentStatus = attendance[cls.name];
                 return (
-                  <div key={cls.id} className={`card class-card ${isAttended ? 'attended' : ''}`} style={cls.isTemporary ? { border: '1px dashed #f59e0b' } : {}}>
+                  <div key={cls.id} className={`card class-card ${currentStatus ? `status-${currentStatus}` : ''}`} style={cls.isTemporary ? { border: '1px dashed #f59e0b' } : {}}>
                     <div className="flex-between mb-2">
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <span className="badge" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
@@ -282,12 +277,25 @@ export default function CollegeSchedule() {
                         >
                           <Edit3 size={16} /> Edit
                         </button>
-                        {isAttended ? (
+                        {currentStatus === 'hadir' && (
                           <span className="badge success">
                             <CheckCircle2 size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }} />
                             Hadir
                           </span>
-                        ) : (
+                        )}
+                        {currentStatus === 'izin' && (
+                          <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
+                            <AlertCircle size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }} />
+                            Izin
+                          </span>
+                        )}
+                        {currentStatus === 'absen' && (
+                          <span className="badge danger">
+                            <XCircle size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }} />
+                            Absen
+                          </span>
+                        )}
+                        {!currentStatus && (
                           <span className="badge">Belum Presensi</span>
                         )}
                       </div>
@@ -302,13 +310,46 @@ export default function CollegeSchedule() {
                     </div>
 
                     <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                      <button 
-                        onClick={() => handleToggleAttendance(cls.name)}
-                        className={isAttended ? 'btn-attended' : 'btn-mark-present'}
-                        style={{ width: '100%' }}
-                      >
-                        {isAttended ? 'Batal Presensi' : 'Tandai Hadir Kuliah'}
-                      </button>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Status Kehadiran Hari Ini:</p>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                        <button 
+                          onClick={() => handleSetAttendance(cls.name, 'hadir')}
+                          style={{
+                            backgroundColor: currentStatus === 'hadir' ? 'var(--success-color)' : 'rgba(16, 185, 129, 0.15)',
+                            color: currentStatus === 'hadir' ? '#ffffff' : 'var(--success-color)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            padding: '0.5rem',
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          🟢 Hadir
+                        </button>
+                        <button 
+                          onClick={() => handleSetAttendance(cls.name, 'izin')}
+                          style={{
+                            backgroundColor: currentStatus === 'izin' ? '#f59e0b' : 'rgba(245, 158, 11, 0.15)',
+                            color: currentStatus === 'izin' ? '#0f172a' : '#f59e0b',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            padding: '0.5rem',
+                            fontSize: '0.875rem',
+                            fontWeight: currentStatus === 'izin' ? 'bold' : 'normal'
+                          }}
+                        >
+                          🟡 Izin
+                        </button>
+                        <button 
+                          onClick={() => handleSetAttendance(cls.name, 'absen')}
+                          style={{
+                            backgroundColor: currentStatus === 'absen' ? 'var(--danger-color)' : 'rgba(239, 68, 68, 0.15)',
+                            color: currentStatus === 'absen' ? '#ffffff' : 'var(--danger-color)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            padding: '0.5rem',
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          🔴 Absen
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
