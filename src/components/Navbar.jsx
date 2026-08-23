@@ -1,27 +1,50 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Calendar, LineChart } from 'lucide-react';
+import { Dumbbell, GraduationCap, LineChart, Settings, LogOut } from 'lucide-react';
 
-export default function Navbar() {
+export default function Navbar({ onLogout }) {
   const location = useLocation();
 
   return (
     <nav className="navbar">
-      <div className="nav-brand">GymTracker</div>
+      <div className="nav-brand">
+        <span>RoutineTracker</span>
+      </div>
       <div className="nav-links">
         <Link 
-          to="/" 
-          className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
+          to="/workout" 
+          className={`nav-link ${location.pathname === '/workout' || location.pathname === '/' ? 'active' : ''}`}
         >
-          <Calendar size={20} />
-          <span>Hari Ini</span>
+          <Dumbbell size={18} />
+          <span>Olahraga</span>
         </Link>
+
+        <Link 
+          to="/college" 
+          className={`nav-link ${location.pathname === '/college' ? 'active' : ''}`}
+        >
+          <GraduationCap size={18} />
+          <span>Kuliah</span>
+        </Link>
+
         <Link 
           to="/history" 
           className={`nav-link ${location.pathname === '/history' ? 'active' : ''}`}
         >
-          <LineChart size={20} />
+          <LineChart size={18} />
           <span>Riwayat</span>
         </Link>
+
+        <Link 
+          to="/settings" 
+          className={`nav-link ${location.pathname === '/settings' ? 'active' : ''}`}
+          title="Pengaturan & Ganti Password"
+        >
+          <Settings size={18} />
+        </Link>
+
+        <button onClick={onLogout} className="nav-logout-btn" title="Kunci / Logout">
+          <LogOut size={16} />
+        </button>
       </div>
     </nav>
   );
