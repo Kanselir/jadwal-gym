@@ -1,10 +1,24 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { Sparkles, Key, BookOpen, CheckCircle2, Bookmark, RefreshCw, Search, Target, Award, Eye, RotateCcw, ArrowRight, Signal } from 'lucide-react';
+import { Sparkles, Key, BookOpen, CheckCircle2, Bookmark, RefreshCw, Search, Target, Award, Eye, RotateCcw, ArrowRight, Plus, Trash2, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export default function Study() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('geminiApiKey') || '');
-  const [showKeyInput, setShowKeyInput] = useState(!apiKey);
+  // Multiple API Keys State
+  const [apiKeys, setApiKeys] = useState(() => {
+    const saved = localStorage.getItem('geminiApiKeys');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    // Fallback to legacy single key if exists
+    const legacyKey = localStorage.getItem('geminiApiKey');
+    return legacyKey ? [legacyKey] : [];
+  });
+
+  const [newKeyInput, setNewKeyInput] = useState('');
+  const [showKeyManager, setShowKeyManager] = useState(apiKeys.length === 0);
   const [activeTab, setActiveTab] = useState('generate'); // 'generate', 'quiz', 'collection'
   const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
 
@@ -15,6 +29,7 @@ export default function Study() {
   const [generatedWords, setGeneratedWords] = useState([]);
   const [genError, setGenError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [activeKeyIndexUsed, setActiveKeyIndexUsed] = useState(null);
 
   // Collection state (learned words)
   const [collection, setCollection] = useState([]);
@@ -41,10 +56,26 @@ export default function Study() {
     }
   }, [activeTab]);
 
-  const handleSaveApiKey = (e) => {
+  // Add new API Key
+  const handleAddApiKey = (e) => {
     e.preventDefault();
-    localStorage.setItem('geminiApiKey', apiKey.trim());
-    setShowKeyInput(false);
+    if (!newKeyInput.trim()) return;
+    const trimmed = newKeyInput.trim();
+    if (apiKeys.includes(trimmed)) {
+      alert("API Key ini sudah ada dalam daftar.");
+      return;
+    }
+    const updated = [...apiKeys, trimmed];
+    setApiKeys(updated);
+    localStorage.setItem('geminiApiKeys', JSON.stringify(updated));
+    setNewKeyInput('');
+  };
+
+  // Remove API Key
+  const handleRemoveApiKey = (indexToRemove) => {
+    const updated = apiKeys.filter((_, idx) => idx !== indexToRemove);
+    setApiKeys(updated);
+    localStorage.setItem('geminiApiKeys', JSON.stringify(updated));
   };
 
   const fetchCollection = async () => {
@@ -133,17 +164,18 @@ export default function Study() {
     }
   };
 
-  // Generate words using Gemini API with fallback & difficulty level
+  // Generate words using Gemini API with Multiple Keys + Fallback
   const handleGenerate = async (e) => {
     e.preventDefault();
-    if (!apiKey) {
-      setShowKeyInput(true);
+    if (!apiKeys.length) {
+      setShowKeyManager(true);
       return;
     }
 
     setGenerating(true);
     setGenError('');
     setSavedSuccess(false);
+    setActiveKeyIndexUsed(null);
 
     const existingWordNames = collection.map(c => c.word.toLowerCase()).join(', ');
 
@@ -173,43 +205,51 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
   }
 ]`;
 
-    const modelsToTry = [selectedModel, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash-exp'];
+    const modelsToTry = [selectedModel, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest'];
     const uniqueModels = Array.from(new Set(modelsToTry));
 
     let lastErrorMessage = '';
     let successData = null;
 
-    for (const model of uniqueModels) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: promptText }] }]
-          })
-        });
+    // Loop through ALL available API Keys
+    for (let kIdx = 0; kIdx < apiKeys.length; kIdx++) {
+      const currentKey = apiKeys[kIdx].trim();
 
-        const resData = await response.json();
+      // Loop through models for this key
+      for (const model of uniqueModels) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: promptText }] }]
+            })
+          });
 
-        if (response.ok && resData.candidates?.[0]?.content?.parts?.[0]?.text) {
-          let rawText = resData.candidates[0].content.parts[0].text;
-          rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-          successData = JSON.parse(rawText);
-          break;
-        } else {
-          lastErrorMessage = resData.error?.message || `Model ${model} tidak merespon dengan benar.`;
+          const resData = await response.json();
+
+          if (response.ok && resData.candidates?.[0]?.content?.parts?.[0]?.text) {
+            let rawText = resData.candidates[0].content.parts[0].text;
+            rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+            successData = JSON.parse(rawText);
+            setActiveKeyIndexUsed(kIdx + 1);
+            break; // Success! Break model loop
+          } else {
+            lastErrorMessage = resData.error?.message || `API Key #${kIdx + 1} / Model ${model} limit/error.`;
+          }
+        } catch (err) {
+          lastErrorMessage = err.message || `Error pada Key #${kIdx + 1}`;
         }
-      } catch (err) {
-        lastErrorMessage = err.message || `Error pada model ${model}`;
       }
+
+      if (successData) break; // Success! Break key loop
     }
 
     if (successData && Array.isArray(successData)) {
-      // Attach difficulty tag to generated words
       const taggedWords = successData.map(w => ({ ...w, difficultyLevel: difficulty }));
       setGeneratedWords(taggedWords);
     } else {
-      setGenError(lastErrorMessage || 'Gagal memproses kata dari Gemini API. Pastikan API Key valid.');
+      setGenError(lastErrorMessage || 'Semua API Key kuotanya habis atau invalid. Silakan tambahkan API Key cadangan baru.');
     }
 
     setGenerating(false);
@@ -250,32 +290,65 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
         </div>
 
         <button 
-          onClick={() => setShowKeyInput(!showKeyInput)}
+          onClick={() => setShowKeyManager(!showKeyManager)}
           className="toggle-btn"
-          style={{ backgroundColor: apiKey ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', color: apiKey ? 'var(--success-color)' : '#f59e0b' }}
+          style={{ backgroundColor: apiKeys.length > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', color: apiKeys.length > 0 ? 'var(--success-color)' : '#f59e0b' }}
         >
-          <Key size={16} /> {apiKey ? 'API Key Terpasang' : 'Set Gemini API Key'}
+          <Key size={16} /> Kelola {apiKeys.length} API Key
         </button>
       </div>
 
-      {/* Gemini API Key Box */}
-      {showKeyInput && (
+      {/* Multiple Gemini API Keys Manager */}
+      {showKeyManager && (
         <div className="card mb-4" style={{ border: '1px solid var(--accent-color)' }}>
-          <h3 className="mb-2" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Key color="var(--accent-color)" size={20} /> Pengaturan Google Gemini API Key
-          </h3>
-          <p style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
-            Dapatkan API Key gratis di <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>Google AI Studio</a> lalu tempelkan di bawah ini.
+          <div className="flex-between mb-2">
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Key color="var(--accent-color)" size={20} /> Pengaturan Multi-API Key (Cadangan AI)
+            </h3>
+            <span className="badge" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+              {apiKeys.length} Key Tersimpan
+            </span>
+          </div>
+
+          <p style={{ fontSize: '0.875rem', marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+            Tambahkan beberapa Gemini API Key dari akun Google yang berbeda sebagai cadangan. Jika satu Key kehabisan kuota, sistem akan **otomatis beralih ke Key cadangan** secara mulus!
           </p>
-          <form onSubmit={handleSaveApiKey} style={{ display: 'flex', gap: '0.5rem' }}>
+
+          {/* List of Keys */}
+          {apiKeys.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+              {apiKeys.map((key, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: '0.5rem', border: '1px solid var(--border-color)', fontSize: '0.875rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ShieldCheck size={16} color="var(--success-color)" />
+                    <strong>API Key #{idx + 1}:</strong>
+                    <code>{key.substring(0, 8)}...{key.substring(key.length - 4)}</code>
+                  </div>
+                  <button 
+                    onClick={() => handleRemoveApiKey(idx)} 
+                    className="nav-logout-btn" 
+                    title="Hapus Key Ini"
+                    style={{ padding: '0.25rem' }}
+                  >
+                    <Trash2 size={14} color="var(--danger-color)" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add Form */}
+          <form onSubmit={handleAddApiKey} style={{ display: 'flex', gap: '0.5rem' }}>
             <input 
               type="password" 
-              placeholder="Tempel Gemini API Key (AIzaSy...)" 
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
+              placeholder="Masukkan Gemini API Key baru (AIzaSy...)" 
+              value={newKeyInput}
+              onChange={e => setNewKeyInput(e.target.value)}
               required
             />
-            <button type="submit" style={{ whiteSpace: 'nowrap' }}>Simpan Key</button>
+            <button type="submit" style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <Plus size={16} /> Tambah Key Cadangan
+            </button>
           </form>
         </div>
       )}
@@ -365,6 +438,12 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
                 {generating ? 'AI Memproses...' : 'Hasilkan Kosakata Baru'}
               </button>
             </form>
+
+            {activeKeyIndexUsed && (
+              <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--success-color)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <ShieldCheck size={14} /> Berhasil menggunakan API Key #{activeKeyIndexUsed}
+              </div>
+            )}
 
             {genError && (
               <div className="badge danger mt-4" style={{ width: '100%', padding: '0.75rem', textAlign: 'center' }}>
