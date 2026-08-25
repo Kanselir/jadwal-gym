@@ -1,7 +1,16 @@
+const dailyPostureRoutines = [
+  { id: "cobra_pose", name: "Cobra Pose", type: "duration", sets: "Rutinitas Postur", minDuration: 2.5, note: "Tahan posisi mengangkat dada total selama 2.5 menit." },
+  { id: "cat_cow", name: "Cat-Cow Stretch", type: "reps", sets: "Rutinitas Postur", minReps: 15, note: "Lakukan gerakan melengkungkan punggung total 15 repetisi." },
+  { id: "forward_bend", name: "Forward Bend", type: "duration", sets: "Rutinitas Postur", minDuration: 0.5, note: "Tahan posisi membungkuk menyentuh ujung kaki total 30 detik (0.5 menit)." },
+  { id: "bridge_pose", name: "Bridge Pose", type: "duration", sets: "Rutinitas Postur", minDuration: 1.5, note: "Tahan posisi mengangkat panggul total selama 1.5 menit." },
+  { id: "chin_tucks_wall_angels", name: "Chin Tucks & Wall Angels", type: "reps", sets: "Rutinitas Postur", minReps: 25, note: "Total 10 rep menarik dagu dan 15 rep menggerakkan tangan di dinding." },
+  { id: "hanging", name: "Gelantungan / Pull Up", type: "duration", sets: "Rutinitas Postur", minDuration: 0.5, note: "Bergantung di palang pull up total 30 detik (dicicil sepanjang hari)." }
+];
+
 export const scheduleData = {
   1: { // Senin
-    title: "Fokus Tubuh Atas (Push, Pull, & Core)",
-    description: "Fokus hari ini adalah melatih kekuatan tubuh bagian atas dengan menyeimbangkan gerakan mendorong dan menarik.",
+    title: "Tubuh Atas & Ketangkasan + Rutinitas Postur",
+    description: "Melatih kekuatan tubuh bagian atas, ketangkasan tinju, serta rutinitas fleksibilitas dan perbaikan postur tubuh.",
     classes: [
       {
         id: "diskrit",
@@ -13,24 +22,30 @@ export const scheduleData = {
       }
     ],
     exercises: [
-      { id: "pushup", name: "Push Up", type: "reps", sets: "3 - 4 set (8-15 rep/set)", minReps: 24, maxReps: 60, note: "Sesuaikan dengan kemampuan, jaga postur tubuh tetap lurus." },
-      { id: "pullup", name: "Gelantungan / Pull Up", type: "reps", sets: "3 - 4 set (5-10 rep/set)", minReps: 15, maxReps: 40, note: "Jika belum bisa pull up penuh, lakukan gerakan menahan badan di atas palang selama mungkin, atau negative pull up." },
-      { id: "barbell", name: "Angkat Barbel / Dumbbell", type: "reps", sets: "3 set (10-15 rep/set)", minReps: 30, maxReps: 45, note: "Lakukan bervariasi, misalnya set pertama untuk Bicep Curl dan set berikutnya untuk Shoulder Press." },
-      { id: "situp_upper", name: "Sit Up", type: "reps", sets: "3 set (15-20 rep/set)", minReps: 45, maxReps: 60, note: "Lakukan perlahan, rasakan kontraksi di perut, jangan menarik leher." }
+      ...dailyPostureRoutines,
+      { id: "pushup", name: "Push Up", type: "reps", sets: "Tubuh Atas", minReps: 40, note: "Selesaikan total 40 repetisi (istirahatkan lengan kapan pun butuh)." },
+      { id: "pullup", name: "Gelantungan / Pull Up", type: "reps", sets: "Tubuh Atas", minReps: 10, note: "Selesaikan total 10 repetisi (bisa dicicil perlahan)." },
+      { id: "barbell", name: "Angkat Barbel / Dumbbell", type: "reps", sets: "Tubuh Atas", minReps: 50, note: "Kombinasikan untuk gerakan melatih otot bisep atau bahu." },
+      { id: "boxing", name: "Samsak Tinju", type: "reps", sets: "Ketangkasan", minReps: 100, note: "Aktif memukul total sebanyak 100 pukulan." },
+      { id: "door_stretch", name: "Door Frame Stretch", type: "duration", sets: "Peregangan", minDuration: 1.0, note: "Regangkan dada di kusen pintu total 1 menit (30d kiri, 30d kanan)." }
     ]
   },
   2: { // Selasa
-    title: "Fokus Tubuh Bawah & Kardio (Legs & Cardio)",
-    description: "Hari ini didedikasikan untuk melatih otot terbesar di tubuh (kaki) yang akan memacu detak jantung dengan cepat.",
+    title: "Tubuh Bawah & Kekuatan Sentral + Rutinitas Postur",
+    description: "Melatih otot kaki, core perut/back, kardio lompat tali, serta peregangan hip flexor.",
     classes: [],
     exercises: [
-      { id: "squat", name: "Squat Jump", type: "reps", sets: "4 set (12-15 rep/set)", minReps: 48, maxReps: 60, note: "Mendaratlah dengan lutut sedikit ditekuk untuk meredam benturan. Bagus untuk tenaga ledak." },
-      { id: "skipping", name: "Lompat Tali / Skipping", type: "duration", sets: "4 - 5 set", minDuration: 10, maxDuration: 15, note: "Lompat intens 1 menit, istirahat 30 detik. (Total 10-15 menit)." }
+      ...dailyPostureRoutines,
+      { id: "squat", name: "Squat Jump", type: "reps", sets: "Tubuh Bawah", minReps: 45, note: "Selesaikan total 45 repetisi dengan memastikan punggung tetap lurus." },
+      { id: "plank", name: "Plank", type: "duration", sets: "Core", minDuration: 1.0, note: "Tahan posisi total selama 1 menit." },
+      { id: "situp", name: "Sit Up", type: "reps", sets: "Core", minReps: 45, note: "Selesaikan total 45 repetisi gerakan perut." },
+      { id: "skipping", name: "Lompat Tali / Skipping", type: "reps", sets: "Kardio", minReps: 600, note: "Melompat total sebanyak 600 kali." },
+      { id: "hip_stretch", name: "Hip Flexor Stretch", type: "duration", sets: "Peregangan", minDuration: 1.0, note: "Tahan posisi lunge total 1 menit (30d kiri, 30d kanan)." }
     ]
   },
   3: { // Rabu
-    title: "Kardio Menengah & Perut",
-    description: "Sesi ini berfungsi untuk pemulihan aktif (active recovery) otot lengan dan kaki, sambil tetap melatih ketahanan jantung.",
+    title: "Kardio Menengah & Fleksibilitas + Rutinitas Postur",
+    description: "Sepeda statis, samsak tinju 100 pukulan, peregangan thoracic extension, serta rutinitas postur.",
     classes: [
       {
         id: "design_thinking",
@@ -50,13 +65,15 @@ export const scheduleData = {
       }
     ],
     exercises: [
-      { id: "bike_medium", name: "Sepeda Statis", type: "duration", sets: "1 Sesi panjang", minDuration: 30, maxDuration: 40, note: "Intensitas Sedang. Anda masih bisa berbicara, tetapi mulai sedikit terengah-engah." },
-      { id: "situp_core", name: "Sit Up / Variasi Perut Lainnya", type: "reps", sets: "3 set (15-20 rep/set)", minReps: 45, maxReps: 60, note: "" }
+      ...dailyPostureRoutines,
+      { id: "bike_medium", name: "Sepeda Statis", type: "duration", sets: "Kardio", minDuration: 30, note: "Intensitas Sedang (30 - 40 menit)." },
+      { id: "boxing_medium", name: "Samsak Tinju", type: "reps", sets: "Ketangkasan", minReps: 100, note: "Aktif memukul total sebanyak 100 pukulan." },
+      { id: "thoracic_ext", name: "Thoracic Extension", type: "reps", sets: "Peregangan", minReps: 10, note: "Regangkan punggung atas ke belakang total 10 repetisi." }
     ]
   },
   4: { // Kamis
-    title: "Fokus Tubuh Atas (Push, Pull, & Core)",
-    description: "Fokus hari ini adalah melatih kekuatan tubuh bagian atas dengan menyeimbangkan gerakan mendorong dan menarik.",
+    title: "Tubuh Atas & Ketangkasan + Rutinitas Postur",
+    description: "Melatih kekuatan tubuh bagian atas, ketangkasan tinju, serta rutinitas fleksibilitas dan perbaikan postur tubuh.",
     classes: [
       {
         id: "infrastruktur_ti",
@@ -76,15 +93,17 @@ export const scheduleData = {
       }
     ],
     exercises: [
-      { id: "pushup", name: "Push Up", type: "reps", sets: "3 - 4 set (8-15 rep/set)", minReps: 24, maxReps: 60, note: "Sesuaikan dengan kemampuan, jaga postur tubuh tetap lurus." },
-      { id: "pullup", name: "Gelantungan / Pull Up", type: "reps", sets: "3 - 4 set (5-10 rep/set)", minReps: 15, maxReps: 40, note: "Jika belum bisa pull up penuh, lakukan gerakan menahan badan di atas palang selama mungkin, atau negative pull up." },
-      { id: "barbell", name: "Angkat Barbel / Dumbbell", type: "reps", sets: "3 set (10-15 rep/set)", minReps: 30, maxReps: 45, note: "Lakukan bervariasi, misalnya set pertama untuk Bicep Curl dan set berikutnya untuk Shoulder Press." },
-      { id: "situp_upper", name: "Sit Up", type: "reps", sets: "3 set (15-20 rep/set)", minReps: 45, maxReps: 60, note: "Lakukan perlahan, rasakan kontraksi di perut, jangan menarik leher." }
+      ...dailyPostureRoutines,
+      { id: "pushup", name: "Push Up", type: "reps", sets: "Tubuh Atas", minReps: 40, note: "Selesaikan total 40 repetisi (istirahatkan lengan kapan pun butuh)." },
+      { id: "pullup", name: "Gelantungan / Pull Up", type: "reps", sets: "Tubuh Atas", minReps: 10, note: "Selesaikan total 10 repetisi (bisa dicicil perlahan)." },
+      { id: "barbell", name: "Angkat Barbel / Dumbbell", type: "reps", sets: "Tubuh Atas", minReps: 50, note: "Kombinasikan untuk gerakan melatih otot bisep atau bahu." },
+      { id: "boxing", name: "Samsak Tinju", type: "reps", sets: "Ketangkasan", minReps: 100, note: "Aktif memukul total sebanyak 100 pukulan." },
+      { id: "door_stretch", name: "Door Frame Stretch", type: "duration", sets: "Peregangan", minDuration: 1.0, note: "Regangkan dada di kusen pintu total 1 menit (30d kiri, 30d kanan)." }
     ]
   },
   5: { // Jumat
-    title: "Fokus Tubuh Bawah & Kardio (Legs & Cardio)",
-    description: "Hari ini didedikasikan untuk melatih otot terbesar di tubuh (kaki) yang akan memacu detak jantung dengan cepat.",
+    title: "Tubuh Bawah & Kekuatan Sentral + Rutinitas Postur",
+    description: "Melatih otot kaki, core perut/back, kardio lompat tali, serta peregangan hip flexor.",
     classes: [
       {
         id: "matematika2",
@@ -96,21 +115,28 @@ export const scheduleData = {
       }
     ],
     exercises: [
-      { id: "squat", name: "Squat Jump", type: "reps", sets: "4 set (12-15 rep/set)", minReps: 48, maxReps: 60, note: "Mendaratlah dengan lutut sedikit ditekuk untuk meredam benturan. Bagus untuk tenaga ledak." },
-      { id: "skipping", name: "Lompat Tali / Skipping", type: "duration", sets: "4 - 5 set", minDuration: 10, maxDuration: 15, note: "Lompat intens 1 menit, istirahat 30 detik. (Total 10-15 menit)." }
+      ...dailyPostureRoutines,
+      { id: "squat", name: "Squat Jump", type: "reps", sets: "Tubuh Bawah", minReps: 45, note: "Selesaikan total 45 repetisi dengan memastikan punggung tetap lurus." },
+      { id: "plank", name: "Plank", type: "duration", sets: "Core", minDuration: 1.0, note: "Tahan posisi total selama 1 menit." },
+      { id: "situp", name: "Sit Up", type: "reps", sets: "Core", minReps: 45, note: "Selesaikan total 45 repetisi gerakan perut." },
+      { id: "skipping", name: "Lompat Tali / Skipping", type: "reps", sets: "Kardio", minReps: 600, note: "Melompat total sebanyak 600 kali." },
+      { id: "hip_stretch", name: "Hip Flexor Stretch", type: "duration", sets: "Peregangan", minDuration: 1.0, note: "Tahan posisi lunge total 1 menit (30d kiri, 30d kanan)." }
     ]
   },
   6: { // Sabtu
-    title: "Kardio Ringan",
-    description: "Tujuannya hanya untuk memperlancar sirkulasi darah dan membantu pemulihan otot-otot yang sudah dilatih selama seminggu.",
+    title: "Kardio Menengah & Fleksibilitas + Rutinitas Postur",
+    description: "Sepeda statis, samsak tinju 100 pukulan, peregangan thoracic extension, serta rutinitas postur.",
     classes: [],
     exercises: [
-      { id: "bike_light", name: "Sepeda Statis", type: "duration", sets: "1 Sesi", minDuration: 20, maxDuration: 30, note: "Intensitas Santai." }
+      ...dailyPostureRoutines,
+      { id: "bike_light", name: "Sepeda Statis", type: "duration", sets: "Kardio", minDuration: 20, note: "Intensitas Santai (20 - 30 menit)." },
+      { id: "boxing_light", name: "Samsak Tinju", type: "reps", sets: "Ketangkasan", minReps: 100, note: "Aktif memukul total sebanyak 100 pukulan." },
+      { id: "thoracic_ext", name: "Thoracic Extension", type: "reps", sets: "Peregangan", minReps: 10, note: "Regangkan punggung atas ke belakang total 10 repetisi." }
     ]
   },
   0: { // Minggu
     title: "Istirahat Total",
-    description: "Berikan waktu bagi otot dan sistem saraf Anda untuk tumbuh dan memperbaiki diri. Tidur yang cukup sangat krusial di hari ini.",
+    description: "Bebaskan tubuh sepenuhnya dari olahraga berat agar hormon pertumbuhan tulang dan pemulihan otot bekerja maksimal saat tidur.",
     classes: [],
     exercises: []
   }
