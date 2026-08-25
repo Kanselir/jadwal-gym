@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { Sparkles, Key, BookOpen, CheckCircle2, Bookmark, RefreshCw, Search, Target, Award, Eye, RotateCcw, ArrowRight, Plus, Trash2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Sparkles, Key, BookOpen, CheckCircle2, Bookmark, RefreshCw, Search, Target, Award, Eye, RotateCcw, ArrowRight, Plus, Trash2, ShieldCheck } from 'lucide-react';
 
 export default function Study() {
   // Multiple API Keys State
@@ -12,7 +12,6 @@ export default function Study() {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {}
     }
-    // Fallback to legacy single key if exists
     const legacyKey = localStorage.getItem('geminiApiKey');
     return legacyKey ? [legacyKey] : [];
   });
@@ -24,7 +23,7 @@ export default function Study() {
 
   // Generation state
   const [wordCount, setWordCount] = useState(5);
-  const [difficulty, setDifficulty] = useState('sedang'); // 'mudah', 'sedang', 'sulit'
+  const [difficulty, setDifficulty] = useState('sedang_biasa'); // 'mudah', 'sedang_biasa', 'sedang_unik', 'sulit'
   const [generating, setGenerating] = useState(false);
   const [generatedWords, setGeneratedWords] = useState([]);
   const [genError, setGenError] = useState('');
@@ -56,7 +55,6 @@ export default function Study() {
     }
   }, [activeTab]);
 
-  // Add new API Key
   const handleAddApiKey = (e) => {
     e.preventDefault();
     if (!newKeyInput.trim()) return;
@@ -71,7 +69,6 @@ export default function Study() {
     setNewKeyInput('');
   };
 
-  // Remove API Key
   const handleRemoveApiKey = (indexToRemove) => {
     const updated = apiKeys.filter((_, idx) => idx !== indexToRemove);
     setApiKeys(updated);
@@ -164,7 +161,7 @@ export default function Study() {
     }
   };
 
-  // Generate words using Gemini API with Multiple Keys + Fallback
+  // Generate words using Gemini API with Multiple Keys + Difficulty Level
   const handleGenerate = async (e) => {
     e.preventDefault();
     if (!apiKeys.length) {
@@ -179,9 +176,13 @@ export default function Study() {
 
     const existingWordNames = collection.map(c => c.word.toLowerCase()).join(', ');
 
-    let difficultyPrompt = "intermediate level for everyday conversation and study";
+    let difficultyPrompt = "intermediate level for standard everyday conversation";
     if (difficulty === 'mudah') {
       difficultyPrompt = "beginner/elementary level (common everyday words that are essential)";
+    } else if (difficulty === 'sedang_biasa') {
+      difficultyPrompt = "intermediate level for standard everyday conversation (common conversational words)";
+    } else if (difficulty === 'sedang_unik') {
+      difficultyPrompt = "intermediate conversational level, but focusing specifically on unique, less familiar words, phrasal verbs, or unique expressions used in conversation that native speakers use but learners often don't know";
     } else if (difficulty === 'sulit') {
       difficultyPrompt = "advanced/academic level (formal, C1/C2 level, TOEFL/IELTS high-tier vocabulary)";
     }
@@ -211,11 +212,9 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
     let lastErrorMessage = '';
     let successData = null;
 
-    // Loop through ALL available API Keys
     for (let kIdx = 0; kIdx < apiKeys.length; kIdx++) {
       const currentKey = apiKeys[kIdx].trim();
 
-      // Loop through models for this key
       for (const model of uniqueModels) {
         try {
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`, {
@@ -233,7 +232,7 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
             rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
             successData = JSON.parse(rawText);
             setActiveKeyIndexUsed(kIdx + 1);
-            break; // Success! Break model loop
+            break;
           } else {
             lastErrorMessage = resData.error?.message || `API Key #${kIdx + 1} / Model ${model} limit/error.`;
           }
@@ -242,7 +241,7 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
         }
       }
 
-      if (successData) break; // Success! Break key loop
+      if (successData) break;
     }
 
     if (successData && Array.isArray(successData)) {
@@ -281,6 +280,14 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
     item.meaning?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const getDifficultyBadgeLabel = (diffKey) => {
+    if (diffKey === 'mudah') return 'Mudah (Dasar)';
+    if (diffKey === 'sedang_biasa') return 'Sedang (Percakapan Biasa)';
+    if (diffKey === 'sedang_unik') return 'Sedang (Percakapan Unik & Phrasal)';
+    if (diffKey === 'sulit') return 'Sulit (Lanjutan / Akademik)';
+    return 'Menengah';
+  };
+
   return (
     <div className="study-page">
       <div className="flex-between mb-4" style={{ flexWrap: 'wrap', gap: '1rem' }}>
@@ -311,10 +318,9 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
           </div>
 
           <p style={{ fontSize: '0.875rem', marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-            Tambahkan beberapa Gemini API Key dari akun Google yang berbeda sebagai cadangan. Jika satu Key kehabisan kuota, sistem akan **otomatis beralih ke Key cadangan** secara mulus!
+            Tambahkan beberapa Gemini API Key sebagai cadangan. Jika satu Key kehabisan kuota, sistem akan **otomatis beralih ke Key cadangan** secara mulus!
           </p>
 
-          {/* List of Keys */}
           {apiKeys.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
               {apiKeys.map((key, idx) => (
@@ -337,7 +343,6 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
             </div>
           )}
 
-          {/* Add Form */}
           <form onSubmit={handleAddApiKey} style={{ display: 'flex', gap: '0.5rem' }}>
             <input 
               type="password" 
@@ -383,13 +388,13 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
           <div className="card mb-4">
             <h2>Minta Kosakata Baru dari AI</h2>
             <p style={{ marginBottom: '1.25rem' }}>
-              Pilih tingkat kesulitan dan jumlah kata. AI akan mencarikan kata yang bermanfaat dan <strong>belum pernah Anda pelajari sebelumnya</strong>.
+              Pilih jenis percakapan/kesulitan dan jumlah kata. AI akan mencarikan kata yang bermanfaat dan <strong>belum pernah Anda pelajari sebelumnya</strong>.
             </p>
 
             <form onSubmit={handleGenerate} style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
               <div>
                 <label style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginRight: '0.5rem', display: 'block', marginBottom: '0.25rem' }}>
-                  Tingkat Kesulitan:
+                  Tingkat Kesulitan / Kategori Percakapan:
                 </label>
                 <select 
                   value={difficulty} 
@@ -397,8 +402,9 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
                   style={{ padding: '0.75rem 1rem', borderRadius: '0.5rem', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', fontSize: '0.9rem', fontWeight: 'bold' }}
                 >
                   <option value="mudah">🟢 Mudah (Umum / Dasar)</option>
-                  <option value="sedang">🟡 Sedang (Menengah / Percakapan)</option>
-                  <option value="sulit">🔴 Sulit (Lanjutan / Akademik)</option>
+                  <option value="sedang_biasa">🟡 Sedang (Percakapan Sehari-hari / Biasa)</option>
+                  <option value="sedang_unik">🟠 Sedang (Percakapan Unik & Less Familiar)</option>
+                  <option value="sulit">🔴 Sulit (Lanjutan / Akademik / IELTS)</option>
                 </select>
               </div>
 
@@ -458,8 +464,8 @@ Return ONLY a valid JSON array without markdown formatting or backticks. Format 
               <div className="flex-between mb-4">
                 <div>
                   <h2>{generatedWords.length} Kosakata Baru Ditemukan!</h2>
-                  <span className="badge" style={{ marginTop: '0.25rem', backgroundColor: difficulty === 'mudah' ? 'rgba(16, 185, 129, 0.15)' : difficulty === 'sulit' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)', color: difficulty === 'mudah' ? 'var(--success-color)' : difficulty === 'sulit' ? 'var(--danger-color)' : '#f59e0b' }}>
-                    Level: {difficulty === 'mudah' ? 'Mudah (Dasar)' : difficulty === 'sulit' ? 'Sulit (Lanjutan)' : 'Sedang (Menengah)'}
+                  <span className="badge" style={{ marginTop: '0.25rem', backgroundColor: difficulty === 'mudah' ? 'rgba(16, 185, 129, 0.15)' : difficulty === 'sedang_unik' ? 'rgba(245, 158, 11, 0.15)' : difficulty === 'sulit' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: difficulty === 'mudah' ? 'var(--success-color)' : difficulty === 'sedang_unik' ? '#f59e0b' : difficulty === 'sulit' ? 'var(--danger-color)' : '#60a5fa' }}>
+                    Level: {getDifficultyBadgeLabel(difficulty)}
                   </span>
                 </div>
                 {!savedSuccess ? (
