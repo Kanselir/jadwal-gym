@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { scheduleData as initialScheduleData, unscheduledClasses } from '../data/schedule';
+import { scheduleData as initialScheduleData } from '../data/schedule';
+import { supabase } from '../supabaseClient';
 import { 
   CheckCircle2, Clock, Calendar, PlusCircle, Edit3, Trash2, AlertTriangle, 
   Search, Filter, BookOpen, AlertCircle, CheckSquare, Square, ChevronRight,
-  GraduationCap, CalendarCheck, MapPin, User, X
+  GraduationCap, CalendarCheck, MapPin, User, X, Cloud, RefreshCw, Check, Database
 } from 'lucide-react';
-import { format, isPast, isToday, differenceInDays, differenceInHours, parseISO } from 'date-fns';
+import { format, isPast, isToday, differenceInDays } from 'date-fns';
 import { id } from 'date-fns/locale';
 
 export default function CollegeSchedule() {
@@ -22,39 +23,21 @@ export default function CollegeSchedule() {
     'Pengantar Teknologi Elektro dan Informatika Cerdas (P)'
   ];
 
-  // Tasks State (Stored in localStorage)
+  // Tasks State (Loaded directly from Supabase college_tasks table)
   const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem('college_assignments');
+    const saved = localStorage.getItem('college_assignments_cache');
     if (saved) {
       try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse college_assignments", e);
-      }
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
     }
-    return [
-      {
-        id: 'task-demo-1',
-        title: 'Resume Materi Logika Proposisi & Modus Ponens',
-        subject: 'Logika dan Struktur Diskrit (B)',
-        deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
-        priority: 'high',
-        completed: false,
-        notes: 'Buat rangkuman 2 halaman diketik PDF dan diupload ke classroom.',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'task-demo-2',
-        title: 'Analisis Studi Kasus Design Thinking Empathize',
-        subject: 'Design Thinking (B)',
-        deadline: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
-        priority: 'medium',
-        completed: false,
-        notes: 'Kelompok 4 orang, persiapkan presentasi slide Figma.',
-        createdAt: new Date().toISOString()
-      }
-    ];
+    return [];
   });
+
+  const [syncing, setSyncing] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState('syncing'); // 'synced', 'syncing', 'offline'
+  const [lastSyncTime, setLastSyncTime] = useState(null);
 
   // Filters State
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'pending', 'completed'
@@ -64,6 +47,7 @@ export default function CollegeSchedule() {
   // Modal State for Add/Edit Task
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [submittingTask, setSubmittingTask] = useState(false);
   const [taskForm, setTaskForm] = useState({
     title: '',
     subject: defaultSubjects[0],
@@ -80,10 +64,46 @@ export default function CollegeSchedule() {
     return saved ? JSON.parse(saved) : initialScheduleData;
   });
 
-  // Save tasks to localStorage on change
+  // Fetch from Supabase and Subscribe to Realtime Updates
   useEffect(() => {
-    localStorage.setItem('college_assignments', JSON.stringify(tasks));
-  }, [tasks]);
+    fetchTasksFromCloud();
+
+    // Supabase Realtime Listener
+    const channel = supabase
+      .channel('college_tasks_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'college_tasks' }, () => {
+        fetchTasksFromCloud();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchTasksFromCloud = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase
+        .from('college_tasks')
+        .select('*')
+        .order('deadline', { ascending: true, nullsFirst: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setTasks(data);
+        localStorage.setItem('college_assignments_cache', JSON.stringify(data));
+        setCloudStatus('synced');
+        setLastSyncTime(new Date());
+      }
+    } catch (err) {
+      console.warn("Error fetching from college_tasks table:", err.message);
+      setCloudStatus('offline');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleOpenAddModal = () => {
     setEditingTask(null);
@@ -104,66 +124,122 @@ export default function CollegeSchedule() {
   const handleOpenEditModal = (task) => {
     setEditingTask(task);
     const isCustom = !defaultSubjects.includes(task.subject);
+    const formattedDeadline = task.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : '';
+    
     setTaskForm({
       title: task.title,
       subject: isCustom ? 'custom' : task.subject,
       customSubject: isCustom ? task.subject : '',
-      deadline: task.deadline,
+      deadline: formattedDeadline,
       priority: task.priority || 'medium',
       notes: task.notes || ''
     });
     setShowTaskModal(true);
   };
 
-  const handleSaveTask = (e) => {
+  const handleSaveTask = async (e) => {
     e.preventDefault();
+    setSubmittingTask(true);
     const finalSubject = taskForm.subject === 'custom' ? (taskForm.customSubject.trim() || 'Lainnya') : taskForm.subject;
+    const isoDeadline = taskForm.deadline ? new Date(taskForm.deadline).toISOString() : null;
 
-    if (editingTask) {
-      // Edit existing
-      setTasks(prev => prev.map(t => {
-        if (t.id === editingTask.id) {
-          return {
-            ...t,
+    try {
+      if (editingTask) {
+        // UPDATE task in Supabase
+        const { error } = await supabase
+          .from('college_tasks')
+          .update({
             title: taskForm.title.trim(),
             subject: finalSubject,
-            deadline: taskForm.deadline,
+            deadline: isoDeadline,
             priority: taskForm.priority,
             notes: taskForm.notes.trim()
-          };
+          })
+          .eq('id', editingTask.id);
+
+        if (error) throw error;
+
+        setTasks(prev => prev.map(t => t.id === editingTask.id ? {
+          ...t,
+          title: taskForm.title.trim(),
+          subject: finalSubject,
+          deadline: isoDeadline,
+          priority: taskForm.priority,
+          notes: taskForm.notes.trim()
+        } : t));
+      } else {
+        // INSERT new task in Supabase
+        const { data, error } = await supabase
+          .from('college_tasks')
+          .insert([{
+            title: taskForm.title.trim(),
+            subject: finalSubject,
+            deadline: isoDeadline,
+            priority: taskForm.priority,
+            completed: false,
+            notes: taskForm.notes.trim()
+          }])
+          .select();
+
+        if (error) throw error;
+        if (data?.[0]) {
+          setTasks(prev => [data[0], ...prev]);
         }
-        return t;
-      }));
-    } else {
-      // Add new
-      const newTask = {
-        id: `task-${Date.now()}`,
-        title: taskForm.title.trim(),
-        subject: finalSubject,
-        deadline: taskForm.deadline,
-        priority: taskForm.priority,
-        completed: false,
-        notes: taskForm.notes.trim(),
-        createdAt: new Date().toISOString()
-      };
-      setTasks(prev => [newTask, ...prev]);
-    }
-
-    setShowTaskModal(false);
-  };
-
-  const handleToggleTask = (taskId) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id === taskId) {
-        return { ...t, completed: !t.completed };
       }
-      return t;
-    }));
+
+      setShowTaskModal(false);
+      setCloudStatus('synced');
+    } catch (err) {
+      console.error("Error saving task to Supabase:", err);
+      alert("Gagal menyimpan ke database Supabase: " + err.message);
+    } finally {
+      setSubmittingTask(false);
+    }
   };
 
-  const handleDeleteTask = (taskId) => {
-    if (window.confirm("Apakah Anda yakin ingin menghapus tugas ini?")) {
-      setTasks(prev => prev.filter(t => t.id !== taskId));
+  const handleToggleTask = async (taskId) => {
+    const targetTask = tasks.find(t => t.id === taskId);
+    if (!targetTask) return;
+
+    const newCompleted = !targetTask.completed;
+
+    // Optimistic UI Update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: newCompleted } : t));
+
+    // Update in Supabase
+    try {
+      const { error } = await supabase
+        .from('college_tasks')
+        .update({ completed: newCompleted })
+        .eq('id', taskId);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Could not update task in Supabase:", err);
+      // Revert if error
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !newCompleted } : t));
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus tugas ini? Data akan terhapus dari Supabase.")) return;
+
+    // Optimistic UI Update
+    const prevTasks = [...tasks];
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+
+    // Delete in Supabase
+    try {
+      const { error } = await supabase
+        .from('college_tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Could not delete from Supabase:", err);
+      alert("Gagal menghapus dari database: " + err.message);
+      setTasks(prevTasks);
     }
   };
 
@@ -176,10 +252,11 @@ export default function CollegeSchedule() {
                           (t.notes && t.notes.toLowerCase().includes(searchTerm.toLowerCase()));
       return matchStatus && matchSubject && matchSearch;
     }).sort((a, b) => {
-      // Pending first, then sort by deadline ascending
       if (a.completed !== b.completed) {
         return a.completed ? 1 : -1;
       }
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
       return new Date(a.deadline) - new Date(b.deadline);
     });
   }, [tasks, statusFilter, subjectFilter, searchTerm]);
@@ -193,6 +270,8 @@ export default function CollegeSchedule() {
     if (isCompleted) {
       return <span className="badge success">✅ Selesai</span>;
     }
+    if (!deadlineStr) return null;
+
     const d = new Date(deadlineStr);
     const now = new Date();
 
@@ -228,11 +307,30 @@ export default function CollegeSchedule() {
       {/* Page Header */}
       <div className="flex-between mb-4" style={{ flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1>Jadwal Tugas Kuliah</h1>
-          <p>Kelola dan pantau seluruh tugas, deadline, dan progres perkuliahan Anda</p>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Database size={26} color="#60a5fa" />
+            Jadwal Tugas Kuliah
+          </h1>
+          <p>Terhubung langsung ke Cloud Database Supabase (Tersinkron di Laptop, HP, & Tablet)</p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Cloud Database Status */}
+          <button 
+            onClick={fetchTasksFromCloud}
+            disabled={syncing}
+            className="toggle-btn"
+            title="Klik untuk menyinkronkan data langsung dari tabel college_tasks Supabase"
+            style={{ 
+              backgroundColor: cloudStatus === 'synced' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', 
+              color: cloudStatus === 'synced' ? 'var(--success-color)' : '#f59e0b',
+              border: `1px solid ${cloudStatus === 'synced' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+            }}
+          >
+            {syncing ? <RefreshCw size={14} className="spin" /> : <Database size={14} />}
+            <span>{syncing ? 'Menyinkronkan...' : '☁️ Database Aktif'}</span>
+          </button>
+
           <button 
             onClick={handleOpenAddModal}
             className="toggle-btn"
@@ -264,7 +362,7 @@ export default function CollegeSchedule() {
           {/* Statistics Bar */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
             <div className="card" style={{ padding: '0.85rem 1rem', textAlign: 'center', backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)' }}>
-              <small style={{ color: 'var(--text-secondary)', display: 'block' }}>Total Tugas</small>
+              <small style={{ color: 'var(--text-secondary)', display: 'block' }}>Total Tugas di Database</small>
               <strong style={{ fontSize: '1.6rem', color: 'var(--text-primary)' }}>{totalTasks}</strong>
             </div>
             <div className="card" style={{ padding: '0.85rem 1rem', textAlign: 'center', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
@@ -330,20 +428,20 @@ export default function CollegeSchedule() {
           {filteredTasks.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
               <BookOpen size={48} color="var(--accent-color)" style={{ margin: '0 auto', marginBottom: '1rem' }} />
-              <h2>Tidak Ada Tugas</h2>
+              <h2>Tidak Ada Tugas di Database</h2>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
                 {searchTerm || statusFilter !== 'all' || subjectFilter !== 'all'
                   ? 'Tidak ada tugas yang cocok dengan filter pencarian Anda.'
-                  : 'Hebat! Semua tugas kuliah sudah terselesaikan atau belum ada tugas yang ditambahkan.'}
+                  : 'Belum ada tugas di database Supabase atau semua tugas sudah terselesaikan!'}
               </p>
               <button onClick={handleOpenAddModal} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                <PlusCircle size={16} /> Buat Catatan Tugas Baru
+                <PlusCircle size={16} /> Tambahkan Tugas Pertama ke Database
               </button>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {filteredTasks.map((task) => {
-                const deadlineDate = new Date(task.deadline);
+                const deadlineDate = task.deadline ? new Date(task.deadline) : null;
                 return (
                   <div 
                     key={task.id} 
@@ -396,7 +494,7 @@ export default function CollegeSchedule() {
                         <button 
                           onClick={() => handleDeleteTask(task.id)} 
                           className="nav-logout-btn"
-                          title="Hapus Tugas"
+                          title="Hapus Tugas dari Supabase"
                         >
                           <Trash2 size={15} color="var(--danger-color)" />
                         </button>
@@ -404,12 +502,14 @@ export default function CollegeSchedule() {
                     </div>
 
                     {/* Deadline Details & Notes */}
-                    <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.85rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)' }}>
-                        <Clock size={14} />
-                        <span>Deadline: <strong>{format(deadlineDate, 'EEEE, d MMMM yyyy - HH:mm', { locale: id })} WIB</strong></span>
+                    {deadlineDate && (
+                      <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)' }}>
+                          <Clock size={14} />
+                          <span>Deadline: <strong>{format(deadlineDate, 'EEEE, d MMMM yyyy - HH:mm', { locale: id })} WIB</strong></span>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {task.notes && (
                       <div style={{ marginTop: '0.5rem', backgroundColor: 'var(--bg-color)', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
@@ -477,7 +577,7 @@ export default function CollegeSchedule() {
         <div className="modal-overlay">
           <div className="modal-card">
             <div className="flex-between mb-4">
-              <h3>{editingTask ? 'Edit Tugas Kuliah' : 'Tambah Tugas Kuliah Baru'}</h3>
+              <h3>{editingTask ? 'Edit Tugas di Database' : 'Tambah Tugas Baru ke Database'}</h3>
               <button onClick={() => setShowTaskModal(false)} className="btn-close">
                 <X size={20} />
               </button>
@@ -572,8 +672,8 @@ export default function CollegeSchedule() {
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button type="submit" style={{ flex: 1, backgroundColor: 'var(--accent-color)', fontWeight: 'bold' }}>
-                  {editingTask ? 'Simpan Perubahan' : 'Tambahkan Tugas'}
+                <button type="submit" disabled={submittingTask} style={{ flex: 1, backgroundColor: 'var(--accent-color)', fontWeight: 'bold' }}>
+                  {submittingTask ? 'Menyimpan ke Supabase...' : (editingTask ? 'Simpan Perubahan' : 'Tambahkan Tugas ke Database')}
                 </button>
                 <button type="button" onClick={() => setShowTaskModal(false)} style={{ backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                   Batal
