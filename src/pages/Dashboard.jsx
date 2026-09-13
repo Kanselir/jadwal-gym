@@ -1,23 +1,36 @@
 import { useState, useEffect } from 'react';
-import { scheduleData as initialScheduleData } from '../data/schedule';
+import { cycleData as initialCycleData } from '../data/schedule';
 import { supabase } from '../supabaseClient';
-import { CheckCircle2, Clock, AlertCircle, Edit3, RotateCcw, X, CalendarCheck, AlertTriangle, PlusCircle, Dumbbell, Sparkles, LayoutList } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, Edit3, RotateCcw, X, CalendarCheck, AlertTriangle, PlusCircle, Dumbbell, Sparkles, LayoutList, Calendar, RefreshCw } from 'lucide-react';
 import { format, getISOWeek, getYear } from 'date-fns';
 import { id } from 'date-fns/locale';
 
 export default function Dashboard() {
-  const [dayIndex, setDayIndex] = useState(new Date().getDay());
+  // 4-Day Cycle Index (1: Tangan, 2: Kaki, 3: Perut, 4: Istirahat)
+  const [cycleDayIndex, setCycleDayIndex] = useState(() => {
+    const savedStart = localStorage.getItem('workoutCycleStartDate');
+    const startDate = savedStart ? new Date(savedStart) : new Date();
+    if (!savedStart) {
+      localStorage.setItem('workoutCycleStartDate', new Date().toISOString());
+    }
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    startDate.setHours(0, 0, 0, 0);
+    const diffDays = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+    const currentCycleDay = ((diffDays % 4) + 4) % 4 + 1;
+    return currentCycleDay;
+  });
+
   const [todayLogs, setTodayLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all'); // 'all', 'posture', 'main', 'extra'
 
-  // Current week identifier, e.g. "2026-W34"
   const currentWeekKey = `${getYear(new Date())}-W${getISOWeek(new Date())}`;
 
-  // Permanent Custom Workout Schedule
+  // Permanent Custom Workout Cycle Schedule
   const [permanentSchedule, setPermanentSchedule] = useState(() => {
-    const saved = localStorage.getItem('customWorkoutSchedule');
-    return saved ? JSON.parse(saved) : initialScheduleData;
+    const saved = localStorage.getItem('customWorkoutCycleSchedule');
+    return saved ? JSON.parse(saved) : initialCycleData;
   });
 
   // Temporary Workout Overrides for THIS week only
@@ -84,15 +97,14 @@ export default function Dashboard() {
   };
 
   const effectiveSchedule = getEffectiveSchedule(permanentSchedule, temporaryOverrides);
-  const schedule = effectiveSchedule[dayIndex] || { title: '', description: '', exercises: [] };
+  const schedule = effectiveSchedule[cycleDayIndex] || { title: '', description: '', exercises: [] };
 
-  // Separate exercises into Daily Posture Routines vs Main Day Specific Exercises
   const postureExercises = schedule.exercises.filter(ex => ex.sets === 'Rutinitas Postur');
   const mainExercises = schedule.exercises.filter(ex => ex.sets !== 'Rutinitas Postur');
 
   useEffect(() => {
     fetchTodayLogs();
-  }, [dayIndex]);
+  }, [cycleDayIndex]);
 
   const fetchTodayLogs = async () => {
     setLoading(true);
@@ -117,7 +129,13 @@ export default function Dashboard() {
     }
   };
 
-  // Open Edit Modal
+  const handleSetTodayAsDay1 = () => {
+    const todayISO = new Date().toISOString();
+    localStorage.setItem('workoutCycleStartDate', todayISO);
+    setCycleDayIndex(1);
+    alert("Siklus 4 hari berhasil di-reset! Hari ini diatur sebagai Hari Ke-1 (Latihan Tangan).");
+  };
+
   const handleOpenEdit = (ex) => {
     setEditingExercise(ex);
     const targetVal = ex.type === 'reps' ? ex.minReps : ex.minDuration;
@@ -125,7 +143,6 @@ export default function Dashboard() {
     setNoteInput(ex.note || '');
   };
 
-  // Save Temporary Target (Current Week Only)
   const handleSaveTemporary = (e) => {
     e.preventDefault();
     if (!editingExercise) return;
@@ -144,7 +161,7 @@ export default function Dashboard() {
     const newOverrides = {
       ...temporaryOverrides,
       [exId]: {
-        dayIdx: dayIndex,
+        dayIdx: cycleDayIndex,
         data: overrideData
       }
     };
@@ -158,7 +175,6 @@ export default function Dashboard() {
     setEditingExercise(null);
   };
 
-  // Save Permanent Target (All Weeks)
   const handleSavePermanent = (e) => {
     e.preventDefault();
     if (!editingExercise) return;
@@ -178,7 +194,7 @@ export default function Dashboard() {
     }));
 
     const updatedPermanent = { ...permanentSchedule };
-    updatedPermanent[dayIndex].exercises = updatedPermanent[dayIndex].exercises.map(ex => {
+    updatedPermanent[cycleDayIndex].exercises = updatedPermanent[cycleDayIndex].exercises.map(ex => {
       if (ex.id === exId) {
         return {
           ...ex,
@@ -190,7 +206,7 @@ export default function Dashboard() {
     });
 
     setPermanentSchedule(updatedPermanent);
-    localStorage.setItem('customWorkoutSchedule', JSON.stringify(updatedPermanent));
+    localStorage.setItem('customWorkoutCycleSchedule', JSON.stringify(updatedPermanent));
 
     setEditingExercise(null);
   };
@@ -202,14 +218,13 @@ export default function Dashboard() {
 
   const handleResetSchedule = () => {
     if (window.confirm("Apakah Anda yakin ingin mengembalikan target olahraga ke jadwal default awal?")) {
-      localStorage.removeItem('customWorkoutSchedule');
+      localStorage.removeItem('customWorkoutCycleSchedule');
       localStorage.removeItem('tempWorkoutOverrides');
-      setPermanentSchedule(initialScheduleData);
+      setPermanentSchedule(initialCycleData);
       setTemporaryOverrides({});
     }
   };
 
-  // Handle Submitting Extra Unscheduled Workout
   const handleAddExtraWorkout = async (e) => {
     e.preventDefault();
     const finalName = extraExerciseName === 'Lainnya (Tulis Sendiri)' ? customExerciseName.trim() : extraExerciseName;
@@ -251,28 +266,101 @@ export default function Dashboard() {
       <div className="flex-between mb-4" style={{ flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1>{format(new Date(), 'EEEE, d MMMM yyyy', { locale: id })}</h1>
-          <p>Jadwal hari ini: <strong style={{ color: 'var(--text-primary)' }}>{schedule.title}</strong></p>
-          <p className="mt-2">{schedule.description}</p>
+          <p style={{ fontSize: '1.15rem', color: '#60a5fa', fontWeight: 'bold' }}>
+            🔄 Siklus Olahraga: {schedule.title}
+          </p>
+          <p className="mt-1" style={{ fontSize: '0.9rem' }}>{schedule.description}</p>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button 
+            onClick={handleSetTodayAsDay1} 
+            className="toggle-btn"
+            title="Atur hari ini sebagai Hari ke-1 (Latihan Tangan)"
+            style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)' }}
+          >
+            <RefreshCw size={15} /> Mulai Hari 1 Hari Ini
+          </button>
           {hasTempOverrides && (
             <button 
               onClick={handleClearTemporary} 
               className="toggle-btn"
-              title="Hapus perubahan target sementara minggu ini"
               style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger-color)', border: '1px solid rgba(239, 68, 68, 0.3)' }}
             >
-              <RotateCcw size={16} /> Hapus Edit Minggu Ini
+              <RotateCcw size={15} /> Hapus Edit Minggu Ini
             </button>
           )}
           <button 
             onClick={handleResetSchedule} 
             className="toggle-btn"
-            title="Reset Target ke Default"
             style={{ backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)' }}
           >
-            <RotateCcw size={16} /> Reset Target Default
+            <RotateCcw size={15} /> Reset Target Default
+          </button>
+        </div>
+      </div>
+
+      {/* 4-DAY ROTATING CYCLE TABS */}
+      <div className="card mb-4" style={{ padding: '0.75rem 1rem', border: '1px solid var(--accent-color)' }}>
+        <p style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+          Pilih Hari Dalam Siklus 4 Hari Berulang:
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem' }}>
+          <button 
+            onClick={() => setCycleDayIndex(1)}
+            style={{
+              backgroundColor: cycleDayIndex === 1 ? 'var(--accent-color)' : 'var(--bg-color)',
+              color: cycleDayIndex === 1 ? 'white' : 'var(--text-primary)',
+              border: `1px solid ${cycleDayIndex === 1 ? 'var(--accent-color)' : 'var(--border-color)'}`,
+              padding: '0.6rem 0.5rem',
+              borderRadius: '0.5rem',
+              fontSize: '0.85rem',
+              fontWeight: 'bold'
+            }}
+          >
+            💪 Hari 1: Tangan
+          </button>
+          <button 
+            onClick={() => setCycleDayIndex(2)}
+            style={{
+              backgroundColor: cycleDayIndex === 2 ? 'var(--accent-color)' : 'var(--bg-color)',
+              color: cycleDayIndex === 2 ? 'white' : 'var(--text-primary)',
+              border: `1px solid ${cycleDayIndex === 2 ? 'var(--accent-color)' : 'var(--border-color)'}`,
+              padding: '0.6rem 0.5rem',
+              borderRadius: '0.5rem',
+              fontSize: '0.85rem',
+              fontWeight: 'bold'
+            }}
+          >
+            🦵 Hari 2: Kaki
+          </button>
+          <button 
+            onClick={() => setCycleDayIndex(3)}
+            style={{
+              backgroundColor: cycleDayIndex === 3 ? 'var(--accent-color)' : 'var(--bg-color)',
+              color: cycleDayIndex === 3 ? 'white' : 'var(--text-primary)',
+              border: `1px solid ${cycleDayIndex === 3 ? 'var(--accent-color)' : 'var(--border-color)'}`,
+              padding: '0.6rem 0.5rem',
+              borderRadius: '0.5rem',
+              fontSize: '0.85rem',
+              fontWeight: 'bold'
+            }}
+          >
+            🏋️‍♂️ Hari 3: Perut
+          </button>
+          <button 
+            onClick={() => setCycleDayIndex(4)}
+            style={{
+              backgroundColor: cycleDayIndex === 4 ? 'var(--accent-color)' : 'var(--bg-color)',
+              color: cycleDayIndex === 4 ? 'white' : 'var(--text-primary)',
+              border: `1px solid ${cycleDayIndex === 4 ? 'var(--accent-color)' : 'var(--border-color)'}`,
+              padding: '0.6rem 0.5rem',
+              borderRadius: '0.5rem',
+              fontSize: '0.85rem',
+              fontWeight: 'bold'
+            }}
+          >
+            💤 Hari 4: Istirahat
           </button>
         </div>
       </div>
@@ -284,7 +372,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* CATEGORY SUB-TABS (TOMBOL PEMISAH KEGIATAN) */}
+      {/* CATEGORY SUB-TABS */}
       <div className="view-toggle-buttons mb-4" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
         <button 
           className={`toggle-btn ${activeCategory === 'all' ? 'active' : ''}`}
@@ -296,7 +384,7 @@ export default function Dashboard() {
           className={`toggle-btn ${activeCategory === 'posture' ? 'active' : ''}`}
           onClick={() => setActiveCategory('posture')}
         >
-          <Sparkles size={16} /> Rutinitas Postur (Setiap Hari) ({postureExercises.length})
+          <Sparkles size={16} /> Rutinitas Postur ({postureExercises.length})
         </button>
         <button 
           className={`toggle-btn ${activeCategory === 'main' ? 'active' : ''}`}
@@ -342,7 +430,7 @@ export default function Dashboard() {
             <div className="mb-4" style={{ marginTop: activeCategory === 'all' ? '2rem' : '0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <Dumbbell color="#60a5fa" size={22} />
-                <h2 style={{ color: '#60a5fa', margin: 0 }}>🏋️‍♂️ Latihan Spesifik Hari Ini</h2>
+                <h2 style={{ color: '#60a5fa', margin: 0 }}>🏋️‍♂️ Latihan Utama Hari Ini ({schedule.title})</h2>
               </div>
               {mainExercises.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>

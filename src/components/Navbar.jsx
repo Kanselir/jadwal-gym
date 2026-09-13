@@ -23,7 +23,7 @@ export default function Navbar({ onLogout }) {
           className={`nav-link ${location.pathname === '/college' ? 'active' : ''}`}
         >
           <GraduationCap size={18} />
-          <span>Kuliah</span>
+          <span>Tugas Kuliah</span>
         </Link>
 
         <Link 
